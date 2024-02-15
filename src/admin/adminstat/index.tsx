@@ -11,8 +11,6 @@ import ReactFlow, {
   updateEdge,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { useLinkClickHandler, useNavigate } from "react-router-dom";
-import Modal from "../../components/modal";
 import AdminNavigation from "../../components/adminnav";
 import MapComponent from "../../components/mapcomp";
 import MapComponent2 from "../../components/mapcompmove";
@@ -24,7 +22,6 @@ import {
   Popup,
   TileLayer,
 } from "react-leaflet";
-import L, { LeafletEvent } from "leaflet";
 
 const statNodes: Node[] = [];
 
@@ -70,6 +67,7 @@ const BasicFlow = () => {
   // interaction management
   const [open, setOpen] = useState<boolean>(false);
   const [single, setSingle] = useState(false);
+  const [subSingle, setSubSingle] = useState(false);
   const [double, setDouble] = useState(false);
 
   //Map or Connection toggler
@@ -223,6 +221,30 @@ const BasicFlow = () => {
         console.error(`Failed to update station. Status: ${response.status}`);
       } else {
         window.alert(`Station connection from ${connId} to stations ${con}`);
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error("Error updating station:", error);
+    }
+  };
+
+  const updateStationConnsMini = async () => {
+    try {
+      const response = await fetch(
+        `http://localhost:0905/stations/connections/${connId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ connecting: con }),
+        }
+      );
+
+      if (!response.ok) {
+        console.error(`Failed to update station. Status: ${response.status}`);
+      } else {
+        window.alert(`Station connected `);
         window.location.reload();
       }
     } catch (error) {
@@ -393,6 +415,25 @@ const BasicFlow = () => {
 
     setSingle(true);
     setDouble(false);
+    setSubSingle(false);
+  };
+
+  const handleNodeClick2 = (event: any, node: any) => {
+    setConnId(node.id);
+    setConnName(node.data.label);
+
+    console.log(connId, con);
+    setStationNodes((prevNodes) =>
+      prevNodes.map((prevNode) => ({
+        ...prevNode,
+        style: {
+          background: prevNode.id === node.id ? "grey" : "white",
+          border:
+            prevNode.id === node.id ? "2px solid black" : "2px solid gray",
+        },
+      }))
+    );
+    setSubSingle(true);
   };
 
   const handleNodeDoubleClick = (event: any, node: any) => {
@@ -422,11 +463,12 @@ const BasicFlow = () => {
 
     setDouble(true);
     setSingle(false);
+    setSubSingle(false);
   };
 
   const handleNodeDelete = async () => {
     console.log(delConId);
-    // Uncomment the line below if needed
+
     if (double === true && single === false) {
       if (delCon.length > 0) {
         await Promise.all(delCon.map((d: any) => deleteConStats(d)));
@@ -499,17 +541,19 @@ const BasicFlow = () => {
   };
 
   const showState = () => {
-    if (single === true && double === false) {
+    if (single === true && double === false && subSingle === false) {
       return `Save edits to ${connName}`;
-    } else if (single === false && double === true) {
+    } else if (single === false && double === true && subSingle === false) {
       return `Save Your Workspace`;
+    } else if (single === false && double === false && subSingle === true) {
+      return `Save edits to ${connName}`;
     } else {
       return `No actions are being done at the moment`;
     }
   };
 
   const buttonHandler = () => {
-    if (single === true && double === false) {
+    if (single === true && double === false && subSingle === false) {
       updateStationConns();
       if (willu) {
         updateStationCoords();
@@ -523,7 +567,7 @@ const BasicFlow = () => {
         savePosition(id, position);
       });
       window.location.reload();
-    } else if (single === false && double === true) {
+    } else if (single === false && double === true && subSingle === false) {
       window.alert("Becareful of accidental Deletions");
       const xny = stationNodes.map(({ id, position }) => ({
         id,
@@ -534,13 +578,18 @@ const BasicFlow = () => {
         savePosition(id, position);
       });
       window.location.reload();
-    } else if (single === false && double === false) {
+    } else if (single === false && double === false && subSingle === true) {
+      updateStationConnsMini();
+      const xny = stationNodes.map(({ id, position }) => ({
+        id,
+        position: [position.x, position.y],
+      }));
+    } else if (single === false && double === false && subSingle === false) {
       window.alert("Nothing Really to do for now. Proceed with your editing");
       const xny = stationNodes.map(({ id, position }) => ({
         id,
         position: [position.x, position.y],
       }));
-
       xny.forEach(({ id, position }) => {
         savePosition(id, position);
       });
@@ -549,7 +598,7 @@ const BasicFlow = () => {
   };
 
   const creationHandler = () => {
-    if (open) {
+    if (open === true) {
       return `Cancel Station Creation `;
     } else {
       return `Create a New Station`;
@@ -910,25 +959,53 @@ const BasicFlow = () => {
                 </>
               ) : (
                 <>
-                  <div
-                    style={{ height: "280px", width: "100%" }}
-                    className="w-full px-2 p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-white-800 dark:border-gray-700 align-right max-h-80 overflow-y-auto my-2"
-                  >
-                    <div className="text-xl text-justify">
-                      {[
-                        "Click on a node in the connections view to edit the location of the station.",
-                        "Gray: Currently Editing station",
-                        "Red: Flagged Station for Deletion",
-                        "Afterwards, Save your edits in the rightmost button below.",
-                        "The left toggle will handle the map/connections screen while the right toggle will let you update the coordinates if toggled on.",
-                      ].map((line, index) => (
-                        <React.Fragment key={index}>
-                          {line}
-                          <br />
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </div>
+                  {isClicked === true ? (
+                    <>
+                      <div
+                        style={{ height: "280px", width: "100%" }}
+                        className="w-full px-2 p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-white-800 dark:border-gray-700 align-right max-h-80 overflow-y-auto my-2"
+                      >
+                        <div className="text-xl text-justify">
+                          {[
+                            "Click on a node to edit the location of the station.",
+                            "Gray: Currently Editing station",
+                            "Red: Flagged Station for Deletion",
+                            "Afterwards, Save your edits in the rightmost button below.",
+                            "The left toggle will handle the map/connections screen while the right toggle will let you update the coordinates if toggled on.",
+                          ].map((line, index) => (
+                            <React.Fragment key={index}>
+                              {line}
+                              <br />
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        style={{ height: "280px", width: "100%" }}
+                        className="w-full px-2 p-6 bg-white border border-gray-200 rounded-lg shadow dark:bg-white-800 dark:border-gray-700 align-right max-h-80 overflow-y-auto my-2"
+                      >
+                        <ReactFlow
+                          nodes={stationNodes}
+                          edges={edges}
+                          onNodesChange={onStationNodesChange}
+                          onEdgesChange={onEdgesChange}
+                          onConnect={onConnect}
+                          onNodeClick={handleNodeClick2}
+                          onEdgeUpdate={onEdgeUpdate}
+                          onNodeDoubleClick={handleNodeDoubleClick}
+                          onNodesDelete={handleNodeDelete}
+                          fitView
+                        >
+                          {/* <MiniMap nodeStrokeWidth={2} /> */}
+                          <Controls />
+                          <Background />
+                        </ReactFlow>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </>
